@@ -272,7 +272,7 @@ def __(mo):
 
 @app.cell
 def __(mo):
-    mo.md("""#### Unfallkarte""")
+    mo.md("""### Unfallkarte""")
     return
 
 
@@ -319,29 +319,41 @@ def __(color_filter, map_data, mo, px):
 
 @app.cell
 def __(mo):
+    mo.md("""---""")
+    return
+
+
+@app.cell
+def __(mo):
     mo.md("""## Statistiken""")
     return
 
 
 @app.cell
 def __(mo):
-    mo.md("""#### Simple Statistiken""")
+    mo.md("""### Simple Statistiken""")
     return
 
 
 @app.cell
 def __(mo, statistics_data):
     table = statistics_data.loc[:, ["Unfalltyp"]].value_counts().to_frame()
-    table.columns = ["Anzahl"]
-    result3 = mo.ui.table(table, selection=None, pagination=False)
+    table.columns = ["Anzahl Unfälle"]
+    result3 = mo.ui.table(
+        table, selection=None, pagination=False, show_column_summaries=False
+    )
 
     table2 = statistics_data.loc[:, ["Strassentyp"]].value_counts().to_frame()
-    table2.columns = ["Anzahl"]
-    result4 = mo.ui.table(table2, selection=None, pagination=False)
+    table2.columns = ["Anzahl Unfälle"]
+    result4 = mo.ui.table(
+        table2, selection=None, pagination=False, show_column_summaries=False
+    )
 
     table3 = statistics_data.loc[:, ["Schweregrad"]].value_counts().to_frame()
-    table3.columns = ["Anzahl"]
-    result5 = mo.ui.table(table3, selection=None, pagination=False)
+    table3.columns = ["Anzahl Unfälle"]
+    result5 = mo.ui.table(
+        table3, selection=None, pagination=False, show_column_summaries=False
+    )
 
     result345 = mo.hstack(
         [result3, result4, result5],
@@ -355,7 +367,67 @@ def __(mo, statistics_data):
 
 @app.cell
 def __(mo):
-    mo.md(r"""#### Monatliche Statistiken""")
+    mo.md("""### Jährliche Statistiken""")
+    return
+
+
+@app.cell
+def __(mo):
+    year_column_filter = mo.ui.dropdown(
+        options=["Unfalltyp", "Strassentyp", "Schweregrad"],
+        value="Unfalltyp",
+        label="Variable für die jährliche Statistik: ",
+    )
+    year_column_filter
+    return (year_column_filter,)
+
+
+@app.cell
+def __(mo, month_column_filter):
+    mo.Html(f"Jährliche Unfallhäufigkeit nach {month_column_filter.value}").center()
+    return
+
+
+@app.cell
+def __(alt, mo, statistics_data, year_column_filter):
+    bars2 = (
+        alt.Chart(statistics_data)
+        .mark_bar()
+        .encode(
+            y=alt.Y(f"count()").stack("zero").title(f"Anzahl Unfälle"),
+            x=alt.X(
+                "Jahr",
+                scale=alt.Scale(
+                    domain=[
+                        i
+                        for i in range(
+                            int(statistics_data["Jahr"].min()),
+                            int(statistics_data["Jahr"].max()) + 1,
+                        )
+                    ]
+                ),
+            ),
+            color=alt.Color(f"{year_column_filter.value}"),
+        )
+    )
+
+    text2 = (
+        alt.Chart(statistics_data)
+        .mark_text(dy=-10)
+        .encode(
+            y=alt.Y(f"count()").stack("zero"),
+            x=alt.X("Jahr"),
+            text=alt.Text(f"count():Q"),
+        )
+    )
+    jahr_plot = mo.ui.altair_chart(bars2 + text2)
+    jahr_plot
+    return bars2, jahr_plot, text2
+
+
+@app.cell
+def __(mo):
+    mo.md(r"""### Monatliche Statistiken""")
     return
 
 
@@ -371,15 +443,21 @@ def __(mo):
 
 
 @app.cell
+def __(mo, month_column_filter):
+    mo.Html(
+        f"Durchschnittliche monatliche Unfallhäufigkeit nach {month_column_filter.value}"
+    ).center()
+    return
+
+
+@app.cell
 def __(alt, mo, month_column_filter, statistics_data):
     bars = (
         alt.Chart(statistics_data)
         .mark_bar()
         .encode(
-            y=alt.Y(f"count({month_column_filter.value})")
-            .stack("zero")
-            .title(f"Anzahl Unfälle"),
-            x=alt.X("Monat").title("Monat"),
+            y=alt.Y(f"count()").stack("zero").title(f"Anzahl Unfälle"),
+            x=alt.X("Monat", scale=alt.Scale(domain=[i for i in range(1, 13)])),
             color=alt.Color(f"{month_column_filter.value}"),
         )
     )
@@ -388,9 +466,9 @@ def __(alt, mo, month_column_filter, statistics_data):
         alt.Chart(statistics_data)
         .mark_text(dy=-10)
         .encode(
-            y=alt.Y(f"count({month_column_filter.value})").stack("zero"),
+            y=alt.Y(f"count()").stack("zero"),
             x=alt.X("Monat"),
-            text=alt.Text(f"count({month_column_filter.value}):Q"),
+            text=alt.Text(f"count():Q"),
         )
     )
     month_plot = mo.ui.altair_chart(bars + text)
