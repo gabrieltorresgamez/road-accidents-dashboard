@@ -11,7 +11,6 @@ def __():
     import geopandas as gpd
     import altair as alt
     import plotly.express as px
-
     return alt, gpd, mo, pd, px
 
 
@@ -54,7 +53,9 @@ def __(mo):
 @app.cell
 def __(data_filtered, map, mo, pd):
     statistics_data = (
-        pd.DataFrame(map.value) if len(pd.DataFrame(map.value)) > 0 else data_filtered
+        pd.DataFrame(map.value)
+        if len(pd.DataFrame(map.value)) > 0
+        else data_filtered
     )
     n_accidents = mo.stat(
         label="Anzahl Unfälle",
@@ -76,7 +77,9 @@ def __(data_filtered, map, mo, pd):
         label="Anzahl Unfälle mit Toten",
         bordered=True,
         value=len(
-            statistics_data[statistics_data["Schweregrad"] == "Unfall mit Getöteten"]
+            statistics_data[
+                statistics_data["Schweregrad"] == "Unfall mit Getöteten"
+            ]
         ),
     )
 
@@ -173,7 +176,9 @@ def __(
     data_filtered = data_filtered[
         data_filtered["Jahr"].astype(int) <= date_range.value[1]
     ]
-    data_filtered = data_filtered[data_filtered["Strassentyp"].isin(selected_roadtypes)]
+    data_filtered = data_filtered[
+        data_filtered["Strassentyp"].isin(selected_roadtypes)
+    ]
     data_filtered = data_filtered[
         data_filtered["Unfalltyp"].isin(selected_accidenttypes)
     ]
@@ -193,7 +198,9 @@ def __(
 @app.cell
 def __(mo):
     toggle_dataset_btn = mo.ui.button(
-        value=False, on_click=lambda value: not value, label="Datensatz ein/ausblenden"
+        value=False,
+        on_click=lambda value: not value,
+        label="Datensatz ein/ausblenden",
     )
     toggle_dataset_btn
     return (toggle_dataset_btn,)
