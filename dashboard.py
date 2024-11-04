@@ -19,6 +19,14 @@ def __(gpd):
     data = gpd.read_parquet("accidents.parquet")
     data['latitude'] = data['geometry'].apply(lambda geom: geom.y)
     data['longitude'] = data['geometry'].apply(lambda geom: geom.x)
+    data = data.rename(columns={
+        "Type": "Unfalltyp",
+        "SeverityCategory": "Schweregrad",
+        "RoadType": "Strassentyp",
+        "Canton": "Kanton",
+        "Year": "Jahr",
+        "Month": "Monat"
+    })
     return (data,)
 
 
@@ -41,29 +49,35 @@ def __(mo):
 
 
 @app.cell
-def __(data_filtered, mo):
+def __(data_filtered, map, mo, pd):
+    statistics_data = pd.DataFrame(map.value) if len(pd.DataFrame(map.value)) > 0 else data_filtered
     n_accidents = mo.stat(
         label="Anzahl Unfälle",
         bordered=True,
-        value=len(data_filtered),
+        value=len(statistics_data),
     )
 
     n_severe_accidents = mo.stat(
         label="Anzahl Unfälle mit Schwerverletzten",
         bordered=True,
-        value=len(data_filtered[data_filtered["SeverityCategory"] == "Unfall mit Schwerverletzten"]),
+        value=len(statistics_data[statistics_data["Schweregrad"] == "Unfall mit Schwerverletzten"]),
     )
 
     n_death_accidents = mo.stat(
         label="Anzahl Unfälle mit Toten",
         bordered=True,
-        value=len(data_filtered[data_filtered["SeverityCategory"] == "Unfall mit Getöteten"]),
+        value=len(statistics_data[statistics_data["Schweregrad"] == "Unfall mit Getöteten"]),
     )
 
     mo.hstack([n_accidents, n_severe_accidents, n_death_accidents],
         widths="equal",
         gap=1,)
-    return n_accidents, n_death_accidents, n_severe_accidents
+    return (
+        n_accidents,
+        n_death_accidents,
+        n_severe_accidents,
+        statistics_data,
+    )
 
 
 @app.cell
@@ -78,13 +92,13 @@ def __(mo):
 @app.cell
 def __(data, mo, toggle_filters_btn):
     date_range = mo.ui.range_slider(
-        start=int(data["Year"].min()), 
-        stop=int(data["Year"].max()), 
+        start=int(data["Jahr"].min()), 
+        stop=int(data["Jahr"].max()), 
         show_value=True, 
         label="Zeitspanne: ",
     )
 
-    list_cantons = data["Canton"].unique()
+    list_cantons = data["Kanton"].unique()
     canton_filter = mo.ui.multiselect(
         options=sorted(list_cantons), 
         #value=list_cantons,
@@ -92,14 +106,14 @@ def __(data, mo, toggle_filters_btn):
         label="Kanton: ",
     )
 
-    list_roadtypes = data["RoadType"].unique()
+    list_roadtypes = data["Strassentyp"].unique()
     roadtype_filter = mo.ui.multiselect(
         options=sorted(list_roadtypes),
         value=list_roadtypes,
         label="Strassentyp: ",
     )
 
-    list_accidenttypes = data["Type"].unique()
+    list_accidenttypes = data["Unfalltyp"].unique()
     accidenttype_filter = mo.ui.multiselect(
         options=sorted(list_accidenttypes), 
         value=list_accidenttypes, 
@@ -138,12 +152,12 @@ def __(
     selected_cantons = canton_filter.value
 
     data_filtered = data.copy()
-    data_filtered = data_filtered[data_filtered["Year"].astype(int) >= date_range.value[0]]
-    data_filtered = data_filtered[data_filtered["Year"].astype(int) <= date_range.value[1]]
-    data_filtered = data_filtered[data_filtered["RoadType"].isin(selected_roadtypes)]
-    data_filtered = data_filtered[data_filtered["Type"].isin(selected_accidenttypes)]
-    data_filtered = data_filtered[data_filtered["Canton"].isin(selected_cantons)]
-    data_filtered = data_filtered.sort_values(["Year", "Canton", "Type", "RoadType", "SeverityCategory"])
+    data_filtered = data_filtered[data_filtered["Jahr"].astype(int) >= date_range.value[0]]
+    data_filtered = data_filtered[data_filtered["Jahr"].astype(int) <= date_range.value[1]]
+    data_filtered = data_filtered[data_filtered["Strassentyp"].isin(selected_roadtypes)]
+    data_filtered = data_filtered[data_filtered["Unfalltyp"].isin(selected_accidenttypes)]
+    data_filtered = data_filtered[data_filtered["Kanton"].isin(selected_cantons)]
+    data_filtered = data_filtered.sort_values(["Jahr", "Kanton", "Unfalltyp", "Strassentyp", "Schweregrad"])
     data_filtered = data_filtered.reset_index()
     return (
         data_filtered,
@@ -166,7 +180,7 @@ def __(mo):
 def __(data_filtered, mo, toggle_dataset_btn):
     result2 = None
     if toggle_dataset_btn.value:
-        result2 = mo.ui.table(data_filtered.loc[:, ['latitude', 'longitude', 'Type', 'SeverityCategory','RoadType', 'Canton', 'Year']], selection=None)
+        result2 = mo.ui.table(data_filtered.loc[:, ['latitude', 'longitude', 'Unfalltyp', 'Schweregrad','Strassentyp', 'Kanton', 'Jahr', 'Monat']], selection=None)
     result2
     return (result2,)
 
@@ -194,7 +208,7 @@ def __(data_filtered, mo):
 @app.cell
 def __(anzahl_unfälle, data_filtered):
     map_data = data_filtered.copy()
-    map_data = map_data.sort_values(by=["Year", "Month"], ascending=[False, False])
+    map_data = map_data.sort_values(by=["Jahr", "Monat"], ascending=[False, False])
     map_data = map_data.head(anzahl_unfälle.value)
     return (map_data,)
 
@@ -218,23 +232,13 @@ def __(mo):
 
 @app.cell
 def __(color_filter, map_data, mo, px):
-    color_column=""
-    match color_filter.value:
-        case "Unfalltyp":
-            color_column="Type"
-        case "Strassentyp":
-            color_column="RoadType"
-        case "Schweregrad":
-            color_column="SeverityCategory"
-
     fig = px.scatter_mapbox(
         map_data,
         lat="latitude",
         lon="longitude",
-        color=color_column,
-        hover_data=["Type", "RoadType", "SeverityCategory", "Month", "Year", "Canton"],
+        color=color_filter.value,
+        hover_data=["Unfalltyp", "Strassentyp", "Schweregrad", "Monat", "Jahr", "Kanton"],
         zoom=8.6,
-        labels={"Type": "Unfalltyp", "RoadType": "Strassentyp", "SeverityCategory": "Schweregrad"}
     )
 
     fig.update_traces(
@@ -257,29 +261,79 @@ def __(color_filter, map_data, mo, px):
 
     map = mo.ui.plotly(fig)
     map
-    return color_column, fig, map
+    return fig, map
 
 
 @app.cell
-def __(color_filter, map, mo, pd):
-    try:
-        table = pd.DataFrame(map.value).loc[:, [color_filter.value]].value_counts().to_frame()
-        table.columns = ["Anzahl"]
-        result3 = mo.ui.table(table, selection=None, pagination=False)
-    except (KeyError):
-        result3 = mo.md("Selektiere eine Region auf der Karte um eine Statistik zu erhalten.")
+def __(mo):
+    mo.md("""## Statistiken""")
+    return
 
-    try:
-        table2 = pd.DataFrame(map.value).loc[:, ["Jahr"]].value_counts().to_frame()
-        table2.columns = ["Anzahl"]
-        result4 = mo.ui.table(table2, selection=None, pagination=False)
-    except (KeyError):
-        result4 = mo.md("")
 
-    mo.hstack([result3, result4],
+@app.cell
+def __(mo):
+    mo.md("""#### Simple Statistiken""")
+    return
+
+
+@app.cell
+def __(mo, statistics_data):
+    table = statistics_data.loc[:, ["Unfalltyp"]].value_counts().to_frame()
+    table.columns = ["Anzahl"]
+    result3 = mo.ui.table(table, selection=None, pagination=False)
+
+    table2 = statistics_data.loc[:, ["Strassentyp"]].value_counts().to_frame()
+    table2.columns = ["Anzahl"]
+    result4 = mo.ui.table(table2, selection=None, pagination=False)
+
+    table3 = statistics_data.loc[:, ["Schweregrad"]].value_counts().to_frame()
+    table3.columns = ["Anzahl"]
+    result5 = mo.ui.table(table3, selection=None, pagination=False)
+
+
+    result345 = mo.hstack(
+        [result3, result4, result5],
         widths="equal",
-        gap=1,)
-    return result3, result4, table, table2
+        gap=1,
+    )
+
+    result345
+    return result3, result345, result4, result5, table, table2, table3
+
+
+@app.cell
+def __(mo):
+    mo.md(r"""#### Monatliche Statistiken""")
+    return
+
+
+@app.cell
+def __(mo):
+    month_column_filter = mo.ui.dropdown(
+        options=["Unfalltyp", "Strassentyp", "Schweregrad"],
+        value="Unfalltyp", 
+        label="Variable für die monatliche Statistik: ",
+    )
+    month_column_filter
+    return (month_column_filter,)
+
+
+@app.cell
+def __(alt, mo, month_column_filter, statistics_data):
+    bars = alt.Chart(statistics_data).mark_bar().encode(
+        y=alt.Y(f'count({month_column_filter.value})').stack('zero').title(f"Anzahl Unfälle"),
+        x=alt.X('Monat').title("Monat"),
+        color=alt.Color(f'{month_column_filter.value}'),
+    )
+
+    text = alt.Chart(statistics_data).mark_text(dy=-10).encode(
+        y=alt.Y(f'count({month_column_filter.value})').stack('zero'),
+        x=alt.X('Monat'),
+        text=alt.Text(f"count({month_column_filter.value}):Q")
+    )
+    month_plot = mo.ui.altair_chart(bars + text)
+    month_plot
+    return bars, month_plot, text
 
 
 if __name__ == "__main__":
