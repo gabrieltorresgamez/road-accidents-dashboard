@@ -11,6 +11,7 @@ def __():
     import geopandas as gpd
     import altair as alt
     import plotly.express as px
+
     return alt, gpd, mo, pd, px
 
 
@@ -27,7 +28,20 @@ def __(gpd):
             "Canton": "Kanton",
             "Year": "Jahr",
             "Month": "Monat",
+            "Hour": "Stunde",
+            "InvolvingBicycle": "VeloInvolviert",
+            "InvolvingMotorcycle": "MotorradInvolviert",
+            "InvolvingPedestrian": "FussgängerInvolviert",
         }
+    )
+    data["VeloInvolviert"] = data["VeloInvolviert"].replace(
+        {"false": "False", "true": "True"}
+    )
+    data["MotorradInvolviert"] = data["MotorradInvolviert"].replace(
+        {"false": "False", "true": "True"}
+    )
+    data["FussgängerInvolviert"] = data["FussgängerInvolviert"].replace(
+        {"false": "False", "true": "True"}
     )
     return (data,)
 
@@ -53,9 +67,7 @@ def __(mo):
 @app.cell
 def __(data_filtered, map, mo, pd):
     statistics_data = (
-        pd.DataFrame(map.value)
-        if len(pd.DataFrame(map.value)) > 0
-        else data_filtered
+        pd.DataFrame(map.value) if len(pd.DataFrame(map.value)) > 0 else data_filtered
     )
     n_accidents = mo.stat(
         label="Anzahl Unfälle",
@@ -77,9 +89,7 @@ def __(data_filtered, map, mo, pd):
         label="Anzahl Unfälle mit Toten",
         bordered=True,
         value=len(
-            statistics_data[
-                statistics_data["Schweregrad"] == "Unfall mit Getöteten"
-            ]
+            statistics_data[statistics_data["Schweregrad"] == "Unfall mit Getöteten"]
         ),
     )
 
@@ -158,12 +168,53 @@ def __(data, mo, toggle_filters_btn):
 
 
 @app.cell
+def __(mo, toggle_filters_btn):
+    show_accidents_bike = mo.ui.checkbox(
+        value=True, label="Unfälle mit Velo einblenden"
+    )
+    show_accidents_motorcycle = mo.ui.checkbox(
+        value=True, label="Unfälle mit Motorrad einblenden"
+    )
+    show_accidents_pedestrian = mo.ui.checkbox(
+        value=True, label="Unfälle mit Fussgänger einblenden"
+    )
+    show_other_accidents = mo.ui.checkbox(
+        value=True, label="Restliche Unfälle einblenden"
+    )
+
+    result6 = None
+    if toggle_filters_btn.value:
+        result6 = mo.hstack(
+            [
+                show_accidents_bike,
+                show_accidents_motorcycle,
+                show_accidents_pedestrian,
+                show_other_accidents,
+            ],
+            widths="equal",
+            gap=0,
+        )
+    result6
+    return (
+        result6,
+        show_accidents_bike,
+        show_accidents_motorcycle,
+        show_accidents_pedestrian,
+        show_other_accidents,
+    )
+
+
+@app.cell
 def __(
     accidenttype_filter,
     canton_filter,
     data,
     date_range,
     roadtype_filter,
+    show_accidents_bike,
+    show_accidents_motorcycle,
+    show_accidents_pedestrian,
+    show_other_accidents,
 ):
     selected_roadtypes = roadtype_filter.value
     selected_accidenttypes = accidenttype_filter.value
@@ -176,15 +227,32 @@ def __(
     data_filtered = data_filtered[
         data_filtered["Jahr"].astype(int) <= date_range.value[1]
     ]
-    data_filtered = data_filtered[
-        data_filtered["Strassentyp"].isin(selected_roadtypes)
-    ]
+    data_filtered = data_filtered[data_filtered["Strassentyp"].isin(selected_roadtypes)]
     data_filtered = data_filtered[
         data_filtered["Unfalltyp"].isin(selected_accidenttypes)
     ]
     data_filtered = data_filtered[data_filtered["Kanton"].isin(selected_cantons)]
+
+    if not show_accidents_bike.value:
+        data_filtered = data_filtered[data_filtered["VeloInvolviert"] == "False"]
+
+    if not show_accidents_motorcycle.value:
+        data_filtered = data_filtered[data_filtered["MotorradInvolviert"] == "False"]
+
+    if not show_accidents_pedestrian.value:
+        data_filtered = data_filtered[data_filtered["FussgängerInvolviert"] == "False"]
+
+    if not show_other_accidents.value:
+        data_filtered = data_filtered[
+            (
+                (data_filtered["VeloInvolviert"] == "True")
+                | (data_filtered["MotorradInvolviert"] == "True")
+                | (data_filtered["FussgängerInvolviert"] == "True")
+            )
+        ]
+
     data_filtered = data_filtered.sort_values(
-        ["Jahr", "Kanton", "Unfalltyp", "Strassentyp", "Schweregrad"]
+        ["Jahr", "Monat", "Stunde", "Kanton", "Unfalltyp", "Strassentyp", "Schweregrad"]
     )
     data_filtered = data_filtered.reset_index()
     return (
@@ -222,6 +290,10 @@ def __(data_filtered, mo, toggle_dataset_btn):
                     "Kanton",
                     "Jahr",
                     "Monat",
+                    "Stunde",
+                    "VeloInvolviert",
+                    "MotorradInvolviert",
+                    "FussgängerInvolviert",
                 ],
             ],
             selection=None,
@@ -296,7 +368,7 @@ def __(color_filter, map_data, mo, px):
             "Schweregrad",
             "Monat",
             "Jahr",
-            "Kanton",
+            "Stunde",
         ],
         zoom=8.6,
     )
@@ -309,6 +381,7 @@ def __(color_filter, map_data, mo, px):
             "Schweregrad=%{customdata[2]}<br>"
             "Jahr=%{customdata[4]}<br>"
             "Monat=%{customdata[3]}<br>"
+            "Stunde=%{customdata[5]}"
         )
     )
 
@@ -390,8 +463,8 @@ def __(mo):
 
 
 @app.cell
-def __(mo, month_column_filter):
-    mo.Html(f"Jährliche Unfallhäufigkeit nach {month_column_filter.value}").center()
+def __(mo, year_column_filter):
+    mo.Html(f"Jährliche Unfallhäufigkeit nach {year_column_filter.value}").center()
     return
 
 
@@ -481,6 +554,57 @@ def __(alt, mo, month_column_filter, statistics_data):
     month_plot = mo.ui.altair_chart(bars + text)
     month_plot
     return bars, month_plot, text
+
+
+@app.cell
+def __(mo):
+    mo.md(r"""### Stündliche Statistiken""")
+    return
+
+
+@app.cell
+def __(mo):
+    hour_column_filter = mo.ui.dropdown(
+        options=["Unfalltyp", "Strassentyp", "Schweregrad"],
+        value="Unfalltyp",
+        label="Variable für die stündliche Statistik: ",
+    )
+    hour_column_filter
+    return (hour_column_filter,)
+
+
+@app.cell
+def __(hour_column_filter, mo):
+    mo.Html(
+        f"Durchschnittliche stündliche Unfallhäufigkeit nach {hour_column_filter.value}"
+    ).center()
+    return
+
+
+@app.cell
+def __(alt, hour_column_filter, mo, statistics_data):
+    bars3 = (
+        alt.Chart(statistics_data)
+        .mark_bar()
+        .encode(
+            y=alt.Y(f"count()").stack("zero").title(f"Anzahl Unfälle"),
+            x=alt.X("Stunde", scale=alt.Scale(domain=[i for i in range(0, 24)])),
+            color=alt.Color(f"{hour_column_filter.value}"),
+        )
+    )
+
+    text3 = (
+        alt.Chart(statistics_data)
+        .mark_text(dy=-10)
+        .encode(
+            y=alt.Y(f"count()").stack("zero"),
+            x=alt.X("Stunde"),
+            text=alt.Text(f"count():Q"),
+        )
+    )
+    hour_plot = mo.ui.altair_chart(bars3 + text3)
+    hour_plot
+    return bars3, hour_plot, text3
 
 
 if __name__ == "__main__":
